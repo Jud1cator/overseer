@@ -1,0 +1,27 @@
+[project]
+name = "karpov-bot"
+version = "0.1.0"
+description = ""
+authors = [
+    {name = "judicator",email = "yarik200027@gmail.com"}
+]
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+    "python-dotenv==1.0.1",
+    "requests==2.32.3",
+    "pydantic==2.10.4",
+    "fastapi[all]==0.115.6",
+    "pyyaml==6.0.2",
+    "pydantic-settings==2.7.1",
+    "SQLAlchemy==2.0.37",
+    "alembic==1.14.1",
+]
+
+
+[build-system]
+requires = ["poetry-core>=2.0.0,<3.0.0"]
+build-backend = "poetry.core.masonry.api"
+
+[tool.poetry]
+package-mode = false
