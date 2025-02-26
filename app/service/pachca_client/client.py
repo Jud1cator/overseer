@@ -1,26 +1,11 @@
-import logging
+import os
 from datetime import datetime, timezone
+from typing import AsyncGenerator
 
-import requests
-from pydantic import BaseModel
+import aiohttp
+from loguru import logger
 
-logger = logging.getLogger(__name__)
-
-
-class ThreadInfo(BaseModel):
-    id: int
-    chat_id: int
-
-
-class Message(BaseModel):
-    id: int
-    entity_type: str
-    entity_id: int
-    chat_id: int
-    content: str
-    user_id: int
-    created_at: datetime
-    thread: ThreadInfo | None
+from app.service.pachca_client.models import Message
 
 
 class PachcaClient:
@@ -32,17 +17,17 @@ class PachcaClient:
     def _get_headers(self):
         return {"Authorization": f"Bearer {self._token}"}
 
-    def get_chats(self):
-        response = requests.get(
+    async def get_chats(self):
+        response = await self._session.get(
             url=f"{self.HOST}/chats",
             headers=self._get_headers(),
         )
-        if response.status_code != 200:
-            logger.error(response.content)
+        if response.status != 200:
+            logger.error(await response.text())
             response.raise_for_status()
-        return response.json()
+        return await response.json()
 
-    def get_messages(
+    async def get_messages(
         self,
         chat_id: int,
         sent_after: datetime = datetime(1970, 1, 1, tzinfo=timezone.utc),
@@ -51,31 +36,32 @@ class PachcaClient:
         page = 1
         messages = []
         while True:
-            response = requests.get(
+            response = await self._session.get(
                 url=f"{self.HOST}/messages",
                 headers=self._get_headers(),
                 params={"chat_id": chat_id, "per": per_page, "page": page},
             )
-            if response.status_code != 200:
+            if response.status != 200:
                 logger.error(response.content)
                 response.raise_for_status()
-            raw_messages = response.json()["data"]
-            for raw_message in raw_messages:
+            raw_messages = await response.json()
+            for raw_message in raw_messages["data"]:
                 message = Message(**raw_message)
                 if message.created_at >= sent_after:
                     messages.append(message)
                 else:
-                    return messages
+                    break
             if len(raw_messages) < per_page:
-                return messages
+                break
             else:
                 page += 1
+        return messages
 
-    def send_message(
+    async def send_message(
         self,
         chat_id: int,
         text: str,
-        parent_message_id: int | None = None,
+        parent_message_id: int | None,
     ):
         body = {
             "message": {
@@ -85,13 +71,26 @@ class PachcaClient:
         }
         if parent_message_id is not None:
             body["message"]["parent_message_id"] = parent_message_id
-        response = requests.post(
-            url=f"{self.HOST}/messages",
-            headers=self._get_headers(),
-            json=body,
-        )
-        if response.status_code != 200:
-            logger.error(response.content.decode())
+
+            response = await self._session.post(
+                url=f"{self.HOST}/messages",
+                headers=self._get_headers(),
+                json=body,
+            )
+        if response.status != 200:
+            logger.error(await response.text())
             response.raise_for_status()
         else:
-            logger.info(f"Message {response['data']['id']} successfuly sent")
+            json = await response.json()
+            logger.info(f"Message {json['data']['id']} successfuly sent")
+
+    async def __aenter__(self):
+        self._session = aiohttp.ClientSession()
+        return self
+
+    async def __aexit__(self, exc_type, exc, tb):
+        await self._session.close()
+
+
+def get_client():
+    return PachcaClient(token=os.environ["PACHCA_TOKEN"])
