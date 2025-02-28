@@ -1,6 +1,5 @@
 import os
 from datetime import datetime, timezone
-from typing import AsyncGenerator
 
 import aiohttp
 from loguru import logger
@@ -71,12 +70,11 @@ class PachcaClient:
         }
         if parent_message_id is not None:
             body["message"]["parent_message_id"] = parent_message_id
-
-            response = await self._session.post(
-                url=f"{self.HOST}/messages",
-                headers=self._get_headers(),
-                json=body,
-            )
+        response = await self._session.post(
+            url=f"{self.HOST}/messages",
+            headers=self._get_headers(),
+            json=body,
+        )
         if response.status != 200:
             logger.error(await response.text())
             response.raise_for_status()
