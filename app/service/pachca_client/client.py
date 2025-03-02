@@ -1,5 +1,6 @@
 import os
 from datetime import datetime, timezone
+from typing import AsyncGenerator
 
 import aiohttp
 from loguru import logger
@@ -90,5 +91,6 @@ class PachcaClient:
         await self._session.close()
 
 
-def get_client():
-    return PachcaClient(token=os.environ["PACHCA_TOKEN"])
+async def get_client() -> AsyncGenerator[PachcaClient, None]:
+    async with PachcaClient(token=os.environ["PACHCA_TOKEN"]) as client:
+        yield client
