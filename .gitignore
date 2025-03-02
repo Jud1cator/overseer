@@ -3,3 +3,5 @@ __pycache__
 .venv
 *.db
 .vscode
+.mypy_cache
+.pytest_cache

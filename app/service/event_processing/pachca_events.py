@@ -14,7 +14,7 @@ async def process_subscribe(
     tracker_queue_key: str,
     session: AsyncSession,
     pachca_client: PachcaClient,
-):
+) -> None:
     issue_key = re.findall(f"{tracker_queue_key}-\\d+", message.content)
     if len(issue_key) == 0:
         logger.info("No issue key found in %s", message.content)
@@ -39,7 +39,7 @@ async def process_unsubscribe(
     tracker_queue_key: str,
     session: AsyncSession,
     pachca_client: PachcaClient,
-):
+) -> None:
     issue_key = re.findall(f"{tracker_queue_key}-\\d+", message.content)
     if len(issue_key) == 0:
         logger.info("No issue key found in %s", message.content)

@@ -14,7 +14,7 @@ async def process_ticket_status_change(
     tracker_status_list: set[str],
     session: AsyncSession,
     pachca_client: PachcaClient,
-):
+) -> None:
     if len(tracker_status_list) > 0 and ticket_event.status not in tracker_status_list:
         logger.info("Status %s is not tracked", ticket_event.issue_key)
         return

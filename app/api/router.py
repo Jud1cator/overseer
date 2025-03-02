@@ -20,7 +20,7 @@ async def subscribe(
     config: AppConfig = Depends(get_config),
     session: AsyncSession = Depends(get_session),
     pachca_client: PachcaClient = Depends(get_client),
-):
+) -> None:
     await process_subscribe(
         message=message,
         tracker_queue_key=config.tracker_queue_key,
@@ -35,7 +35,7 @@ async def unsubscribe(
     config: AppConfig = Depends(get_config),
     session: AsyncSession = Depends(get_session),
     pachca_client: PachcaClient = Depends(get_client),
-):
+) -> None:
     await process_unsubscribe(
         message=message,
         tracker_queue_key=config.tracker_queue_key,
@@ -50,7 +50,7 @@ async def ticket_status_change(
     config: AppConfig = Depends(get_config),
     session: AsyncSession = Depends(get_session),
     pachca_client: PachcaClient = Depends(get_client),
-):
+) -> None:
     await process_ticket_status_change(
         ticket_event=ticket_event,
         tracker_status_list=config.tracker_status_list,

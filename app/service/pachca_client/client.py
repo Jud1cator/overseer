@@ -1,5 +1,6 @@
 import os
 from datetime import datetime, timezone
+from types import TracebackType
 from typing import AsyncGenerator
 
 import aiohttp
@@ -14,18 +15,8 @@ class PachcaClient:
     def __init__(self, token: str):
         self._token = token
 
-    def _get_headers(self):
+    def _get_headers(self) -> dict[str, str]:
         return {"Authorization": f"Bearer {self._token}"}
-
-    async def get_chats(self):
-        response = await self._session.get(
-            url=f"{self.HOST}/chats",
-            headers=self._get_headers(),
-        )
-        if response.status != 200:
-            logger.error(await response.text())
-            response.raise_for_status()
-        return await response.json()
 
     async def get_messages(
         self,
@@ -62,7 +53,7 @@ class PachcaClient:
         chat_id: int,
         text: str,
         parent_message_id: int | None,
-    ):
+    ) -> None:
         body = {
             "message": {
                 "entity_id": chat_id,
@@ -83,11 +74,16 @@ class PachcaClient:
             json = await response.json()
             logger.info(f"Message {json['data']['id']} successfuly sent")
 
-    async def __aenter__(self):
+    async def __aenter__(self) -> "PachcaClient":
         self._session = aiohttp.ClientSession()
         return self
 
-    async def __aexit__(self, exc_type, exc, tb):
+    async def __aexit__(
+        self,
+        exc_type: type[BaseException] | None,
+        exc: BaseException | None,
+        tb: TracebackType,
+    ) -> None:
         await self._session.close()
 
 
