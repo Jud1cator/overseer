@@ -1,11 +1,18 @@
 FROM python:3.12.7-slim-bookworm
 
-RUN apt update -y
-RUN apt install curl -y
-RUN curl -sSL https://install.python-poetry.org | python3 
+ENV POETRY_VERSION=2.0.1 \
+    POETRY_VIRTUALENVS_CREATE=false \
+    POETRY_CACHE_DIR='/var/cache/pypoetry' \
+    POETRY_HOME='/usr/local'
+
+RUN apt-get update && apt-get upgrade -y \
+    && apt-get install --no-install-recommends -y \
+    curl \
+    && curl -sSL https://install.python-poetry.org | python3 
+
 COPY pyproject.toml poetry.lock /overseer/
 WORKDIR /overseer
-RUN /root/.local/bin/poetry install --no-ansi --no-interaction
+RUN poetry install --no-ansi --no-interaction
 
 COPY app /overseer/app
 

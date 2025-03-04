@@ -9,8 +9,7 @@ from sqlalchemy.ext.asyncio import (
 )
 
 sessionmaker = async_sessionmaker(
-    bind=create_async_engine(url=os.environ["STORAGE_DSN"]),
-    echo=True,
+    bind=create_async_engine(url=os.environ["STORAGE_DSN"], echo=True)
 )
 logger.info("Engine created because of the import")
 
