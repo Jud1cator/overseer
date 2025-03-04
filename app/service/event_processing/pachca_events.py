@@ -17,7 +17,7 @@ async def process_subscribe(
 ) -> None:
     issue_key = re.findall(f"{tracker_queue_key}-\\d+", message.content)
     if len(issue_key) == 0:
-        logger.info("No issue key found in %s", message.content)
+        logger.info("No issue key found in {}", message.content)
         return
     issue_key = issue_key[0]
     sub = ThreadTicketSub(
@@ -42,7 +42,7 @@ async def process_unsubscribe(
 ) -> None:
     issue_key = re.findall(f"{tracker_queue_key}-\\d+", message.content)
     if len(issue_key) == 0:
-        logger.info("No issue key found in %s", message.content)
+        logger.info("No issue key found in {}", message.content)
         return
     issue_key = issue_key[0]
     stmt = (
