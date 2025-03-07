@@ -8,6 +8,7 @@ mypy:
   before_script:
     - apt-get update -qy
     - curl -sSL https://install.python-poetry.org | python3
+    - export POETRY_HOME='/usr/local'
     - poetry install
   script:
     - mypy --strict app
@@ -18,6 +19,7 @@ pytest:
   before_script:
     - apt-get update -qy
     - curl -sSL https://install.python-poetry.org | python3
+    - POETRY_HOME='/usr/local'
     - poetry install
   script:
     - pytest tests
