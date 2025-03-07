@@ -1,15 +1,13 @@
 stages:
-  - lint
   - test
 
 mypy:
-  stage: lint
+  stage: test
   image: python:3.12
   before_script:
     - apt-get update -qy
     - curl -sSL https://install.python-poetry.org | python3
-    - export POETRY_HOME='/usr/local'
-    - poetry install
+    - /root/.local/bin/poetry install
   script:
     - mypy --strict app
 
@@ -19,8 +17,7 @@ pytest:
   before_script:
     - apt-get update -qy
     - curl -sSL https://install.python-poetry.org | python3
-    - POETRY_HOME='/usr/local'
-    - poetry install
+    - /root/.local/bin/poetry install
   script:
     - pytest tests
 
