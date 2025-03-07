@@ -1,6 +1,6 @@
 FROM python:3.12.7-slim-bookworm
 
-ENV POETRY_VERSION=2.0.1 \
+ENV POETRY_VERSION=2.1.1 \
     POETRY_VIRTUALENVS_CREATE=false \
     POETRY_CACHE_DIR='/var/cache/pypoetry' \
     POETRY_HOME='/usr/local'
