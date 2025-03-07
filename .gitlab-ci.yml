@@ -1,8 +1,7 @@
 stages:
   - test
 
-mypy:
-  stage: test
+.setup:
   image: python:3.12
   before_script:
     - apt-get update -qy
@@ -12,20 +11,16 @@ mypy:
     - export POETRY_HOME='/usr/local'
     - curl -sSL https://install.python-poetry.org | python3
     - poetry install --no-ansi --no-interaction
+
+mypy:
+  extends: .setup
+  stage: test
   script:
     - mypy --strict app
 
 pytest:
+  extends: .setup
   stage: test
-  image: python:3.12
-  before_script:
-    - apt-get update -qy
-    - export POETRY_VERSION=2.1.1
-    - export POETRY_VIRTUALENVS_CREATE=false
-    - export POETRY_CACHE_DIR='/var/cache/pypoetry'
-    - export POETRY_HOME='/usr/local'
-    - curl -sSL https://install.python-poetry.org | python3
-    - poetry install --no-ansi --no-interaction
   script:
     - pytest tests
 
