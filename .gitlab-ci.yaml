@@ -1,0 +1,23 @@
+stages:
+  - lint
+  - test
+
+mypy:
+  stage: lint
+  image: python:3.12
+  before_script:
+    - apt-get update -qy
+    - curl -sSL https://install.python-poetry.org | python3
+    - poetry install
+  script:
+    - mypy --strict app
+
+pytest:
+  stage: test
+  image: python:3.12
+  before_script:
+    - apt-get update -qy
+    - curl -sSL https://install.python-poetry.org | python3
+    - poetry install
+  script:
+    - pytest tests
