@@ -20,18 +20,31 @@ async def process_subscribe(
         logger.info("No issue key found in {}", message.content)
         return
     issue_key = issue_key[0]
-    sub = ThreadTicketSub(
-        issue_key=issue_key,
-        chat_id=message.chat_id,
-        message_id=message.id,
+    stmt = (
+        select(ThreadTicketSub)
+        .where(ThreadTicketSub.issue_key == issue_key)
+        .where(ThreadTicketSub.chat_id == message.chat_id)
     )
-    session.add(sub)
-    await session.commit()
-    await pachca_client.send_message(
-        chat_id=message.chat_id,
-        text=f"Я сообщу вам об изменении статуса тикета {issue_key}",
-        parent_message_id=message.id,
-    )
+    result = (await session.execute(stmt)).scalar_one_or_none()
+    if result is None:
+        sub = ThreadTicketSub(
+            issue_key=issue_key,
+            chat_id=message.chat_id,
+            message_id=message.id,
+        )
+        session.add(sub)
+        await pachca_client.send_message(
+            chat_id=message.chat_id,
+            text=f"Я сообщу вам об изменении статуса тикета {issue_key}",
+            parent_message_id=message.id,
+        )
+        await session.commit()
+    else:
+        await pachca_client.send_message(
+            chat_id=message.chat_id,
+            text=f"Тикет {issue_key} уже отслеживается в этом треде",
+            parent_message_id=message.id,
+        )
 
 
 async def process_unsubscribe(
@@ -50,12 +63,18 @@ async def process_unsubscribe(
         .where(ThreadTicketSub.issue_key == issue_key)
         .where(ThreadTicketSub.chat_id == message.chat_id)
     )
-    result = await session.execute(stmt)
-    sub = result.scalars().one()
-    await session.delete(sub)
-    await session.commit()
-    await pachca_client.send_message(
-        chat_id=message.chat_id,
-        text=f"Тикет {issue_key} больше не отслеживается в этом треде",
-        parent_message_id=message.id,
-    )
+    result = (await session.execute(stmt)).scalars().one_or_none()
+    if result is None:
+        await pachca_client.send_message(
+            chat_id=message.chat_id,
+            text=f"Тикет {issue_key} не отслеживался в этом треде",
+            parent_message_id=message.id,
+        )
+    else:
+        await session.delete(result)
+        await pachca_client.send_message(
+            chat_id=message.chat_id,
+            text=f"Тикет {issue_key} больше не отслеживается в этом треде",
+            parent_message_id=message.id,
+        )
+        await session.commit()

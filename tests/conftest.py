@@ -1,7 +1,10 @@
 import asyncio
 from typing import AsyncGenerator
 from unittest.mock import patch
+import aiohttp
 
+import aiohttp.http_exceptions
+import aiohttp.web_exceptions
 import pytest_asyncio
 from loguru import logger
 from sqlalchemy import delete
