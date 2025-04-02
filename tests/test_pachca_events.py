@@ -1,6 +1,7 @@
 from datetime import datetime, timezone
 
 import pytest
+from unittest.mock import patch
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -133,3 +134,282 @@ async def test_process_unsubscribe(
         text=f"Тикет {issue_key} больше не отслеживается в этом треде",
         parent_message_id=message.id,
     )
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("tracker_queue_key", "issue_key", "message"),
+    (
+        (
+            "BACKLOG",
+            "BACKLOG-1",
+            pachca_message_factory(
+                id=1,
+                chat_id=1,
+                content="/unsubscribe BACKLOG-1",
+            ),
+        ),
+    ),
+)
+async def test_subscribe_already_subscribed(
+    issue_key: str,
+    message: PachcaMessage,
+    tracker_queue_key: str,
+    session: AsyncSession,
+    pachca_client: PachcaClient,
+):
+    for _ in range(2):
+        await process_subscribe(
+            message=message,
+            tracker_queue_key=tracker_queue_key,
+            session=session,
+            pachca_client=pachca_client,
+        )
+    pachca_client.send_message.assert_called_with(
+        chat_id=message.chat_id,
+        text=f"Тикет {issue_key} уже отслеживается в этом треде",
+        parent_message_id=message.id,
+    )
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("tracker_queue_key", "issue_key", "message"),
+    (
+        (
+            "BACKLOG",
+            "BACKLOG-1",
+            pachca_message_factory(
+                id=1,
+                chat_id=1,
+                content="/unsubscribe BACKLOG-1",
+            ),
+        ),
+    ),
+)
+async def test_process_unsubscribe_non_existing(
+    issue_key: str,
+    message: PachcaMessage,
+    tracker_queue_key: str,
+    session: AsyncSession,
+    pachca_client: PachcaClient,
+):
+    await process_unsubscribe(
+        message=message,
+        tracker_queue_key=tracker_queue_key,
+        session=session,
+        pachca_client=pachca_client,
+    )
+    pachca_client.send_message.assert_called_with(
+        chat_id=message.chat_id,
+        text=f"Тикет {issue_key} не отслеживался в этом треде",
+        parent_message_id=message.id,
+    )
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("tracker_queue_key", "issue_key", "message"),
+    (
+        (
+            "BACKLOG",
+            "BACKLOG-1",
+            pachca_message_factory(
+                id=1,
+                chat_id=1,
+                content="/subscribe BACKLOG-1",
+            ),
+        ),
+    ),
+)
+async def test_process_subscribe_is_transactional_with_broken_orm(
+    issue_key: str,
+    message: PachcaMessage,
+    tracker_queue_key: str,
+    session: AsyncSession,
+    pachca_client: PachcaClient,
+):
+    patcher = patch("sqlalchemy.ext.asyncio.AsyncSession.add")
+    patcher.start().side_effect = Exception()
+    try:
+        await process_subscribe(
+            message=message,
+            tracker_queue_key=tracker_queue_key,
+            session=session,
+            pachca_client=pachca_client,
+        )
+    except Exception:
+        patcher.stop()
+        await session.rollback()
+        stmt = (
+            select(ThreadTicketSub)
+            .where(ThreadTicketSub.issue_key == issue_key)
+            .where(ThreadTicketSub.chat_id == message.chat_id)
+        )
+        result = await session.execute(stmt)
+        sub = result.scalars().one_or_none()
+        assert sub is None
+        pachca_client.send_message.assert_not_called()
+    else:
+        assert False, "Exception was not raised, but it should"
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("tracker_queue_key", "issue_key", "message"),
+    (
+        (
+            "BACKLOG",
+            "BACKLOG-1",
+            pachca_message_factory(
+                id=1,
+                chat_id=1,
+                content="/subscribe BACKLOG-1",
+            ),
+        ),
+    ),
+)
+async def test_process_subscribe_is_transactional_with_broken_pachca(
+    issue_key: str,
+    message: PachcaMessage,
+    tracker_queue_key: str,
+    session: AsyncSession,
+    pachca_client: PachcaClient,
+):
+    patcher = patch("app.service.pachca_client.PachcaClient.send_message")
+    method = patcher.start()
+    method.side_effect = Exception()
+    try:
+        await process_subscribe(
+            message=message,
+            tracker_queue_key=tracker_queue_key,
+            session=session,
+            pachca_client=pachca_client,
+        )
+    except Exception:
+        patcher.stop()
+        await session.rollback()
+        stmt = (
+            select(ThreadTicketSub)
+            .where(ThreadTicketSub.issue_key == issue_key)
+            .where(ThreadTicketSub.chat_id == message.chat_id)
+        )
+        result = await session.execute(stmt)
+        sub = result.scalars().one_or_none()
+        assert sub is None
+        method.assert_called_once()
+    else:
+        assert False, "Exception was not raised, but it should"
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("tracker_queue_key", "issue_key", "message"),
+    (
+        (
+            "BACKLOG",
+            "BACKLOG-1",
+            pachca_message_factory(
+                id=1,
+                chat_id=1,
+                content="/unsubscribe BACKLOG-1",
+            ),
+        ),
+    ),
+)
+async def test_process_unsubscribe_is_transactional_with_broken_orm(
+    issue_key: str,
+    message: PachcaMessage,
+    tracker_queue_key: str,
+    session: AsyncSession,
+    pachca_client: PachcaClient,
+):
+    sub = ThreadTicketSub(
+        issue_key=issue_key,
+        chat_id=message.chat_id,
+        message_id=message.id,
+    )
+    session.add(sub)
+    await session.commit()
+    patcher = patch("sqlalchemy.ext.asyncio.AsyncSession.delete")
+    patcher.start().side_effect = Exception()
+    try:
+        await process_unsubscribe(
+            message=message,
+            tracker_queue_key=tracker_queue_key,
+            session=session,
+            pachca_client=pachca_client,
+        )
+    except Exception:
+        patcher.stop()
+        await session.rollback()
+        stmt = (
+            select(ThreadTicketSub)
+            .where(ThreadTicketSub.issue_key == issue_key)
+            .where(ThreadTicketSub.chat_id == message.chat_id)
+        )
+        result = await session.execute(stmt)
+        sub = result.scalars().one()
+        assert sub.issue_key == issue_key
+        assert sub.chat_id == message.chat_id
+        assert sub.message_id == message.id
+        pachca_client.send_message.assert_not_called()
+    else:
+        assert False, "Exception was not raised, but it should"
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("tracker_queue_key", "issue_key", "message"),
+    (
+        (
+            "BACKLOG",
+            "BACKLOG-1",
+            pachca_message_factory(
+                id=1,
+                chat_id=1,
+                content="/unsubscribe BACKLOG-1",
+            ),
+        ),
+    ),
+)
+async def test_process_unsubscribe_is_transactional_with_broken_pachca(
+    issue_key: str,
+    message: PachcaMessage,
+    tracker_queue_key: str,
+    session: AsyncSession,
+    pachca_client: PachcaClient,
+):
+    sub = ThreadTicketSub(
+        issue_key=issue_key,
+        chat_id=message.chat_id,
+        message_id=message.id,
+    )
+    session.add(sub)
+    await session.commit()
+    patcher = patch("app.service.pachca_client.PachcaClient.send_message")
+    method = patcher.start()
+    method.side_effect = Exception()
+    try:
+        await process_unsubscribe(
+            message=message,
+            tracker_queue_key=tracker_queue_key,
+            session=session,
+            pachca_client=pachca_client,
+        )
+    except Exception:
+        patcher.stop()
+        await session.rollback()
+        stmt = (
+            select(ThreadTicketSub)
+            .where(ThreadTicketSub.issue_key == issue_key)
+            .where(ThreadTicketSub.chat_id == message.chat_id)
+        )
+        result = await session.execute(stmt)
+        sub = result.scalars().one()
+        assert sub.issue_key == issue_key
+        assert sub.chat_id == message.chat_id
+        assert sub.message_id == message.id
+        method.assert_called_once()
+    else:
+        assert False, "Exception was not raised, but it should"
