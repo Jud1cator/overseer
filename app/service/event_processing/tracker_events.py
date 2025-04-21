@@ -18,9 +18,7 @@ async def process_ticket_status_change(
     if len(tracker_status_list) > 0 and ticket_event.status not in tracker_status_list:
         logger.info("Status %s is not tracked", ticket_event.issue_key)
         return
-    stmt = select(ThreadTicketSub).where(
-        ThreadTicketSub.issue_key == ticket_event.issue_key
-    )
+    stmt = select(ThreadTicketSub).where(ThreadTicketSub.issue_key == ticket_event.issue_key)
     result = await session.execute(stmt)
     tasks = []
     for sub in result.scalars():
@@ -33,4 +31,11 @@ async def process_ticket_status_change(
                 )
             )
         )
-    await asyncio.gather(*tasks)
+    results = await asyncio.gather(*tasks, return_exceptions=True)
+    n_exceptions = sum(1 if isinstance(r, Exception) else 0 for r in results)
+    if n_exceptions > 0:
+        logger.warning(
+            "Some errors were encountered while trying to send messages, {}/{} requests failed.".format(
+                n_exceptions, len(results)
+            )
+        )
