@@ -25,3 +25,13 @@ class PachcaMessage(BaseModel):
 class TicketStatusChange(BaseModel):
     issue_key: str
     status: str
+
+
+class PachcaReaction(BaseModel):
+    type: str
+    event: str
+    message_id: int
+    code: str
+    user_id: int
+    created_at: datetime
+    webhook_timestamp: datetime

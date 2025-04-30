@@ -1,14 +1,21 @@
 from datetime import datetime, timezone
+from unittest.mock import patch
 
 import pytest
-from unittest.mock import patch
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.models import PachcaMessage, ThreadInfo
-from app.service.event_processing.pachca_events import process_subscribe, process_unsubscribe
-from app.service.orm.models import ThreadTicketSub
+from app.api.models import PachcaMessage, PachcaReaction, ThreadInfo
+from app.config import AppConfig
+from app.service.event_processing.pachca_events import (
+    process_message,
+    process_reaction,
+    process_subscribe,
+    process_unsubscribe,
+)
+from app.service.orm.models import StudentMessage, ThreadTicketSub
 from app.service.pachca_client import PachcaClient
+from app.service.pachca_client.models import User as PachcaUser
 
 
 def pachca_message_factory(
@@ -21,12 +28,9 @@ def pachca_message_factory(
     user_id=1,
     created_at=datetime.now(timezone.utc),
     chat_id=1,
-    parent_message_id=1,
-    thread=ThreadInfo(
-        message_id=1,
-        message_chat_id=1,
-    ),
-):
+    parent_message_id=None,
+    thread=None
+) -> PachcaMessage:
     return PachcaMessage(
         type=type,
         id=id,
@@ -39,6 +43,66 @@ def pachca_message_factory(
         chat_id=chat_id,
         parent_message_id=parent_message_id,
         thread=thread,
+    )
+
+
+def pachca_user_factory(
+    id=1,
+    first_name="default_first_name",
+    last_name="default_last_name",
+    nickname="default_nickname",
+    email="default_email",
+    phone_number="default_phone_number",
+    department="default_department",
+    title="default_title",
+    role="default_role",
+    suspended=False,
+    invite_status="default_invite_status",
+    list_tags=("tag1",),
+    bot=False,
+    created_at=datetime.now(timezone.utc).isoformat(),
+    last_activity_at=datetime.now(timezone.utc).isoformat(),
+    time_zone="MSK",
+    image_url="default_image_url",
+) -> PachcaUser:
+    return PachcaUser(
+        id=id,
+        first_name=first_name,
+        last_name=last_name,
+        nickname=nickname,
+        email=email,
+        phone_number=phone_number,
+        department=department,
+        title=title,
+        role=role,
+        suspended=suspended,
+        invite_status=invite_status,
+        list_tags=list_tags,
+        bot=bot,
+        created_at=created_at,
+        last_activity_at=last_activity_at,
+        time_zone=time_zone,
+        image_url=image_url,
+    )
+
+
+def pachca_reaction_factory(
+    type="reaction",
+    event="new",
+    message_id=1,
+    code="default_code",
+    user_id=1,
+    created_at=datetime.now(timezone.utc),
+    webhook_timestamp=datetime.now(timezone.utc),
+) -> PachcaReaction:
+    return PachcaReaction(
+        type=type,
+        event=event,
+        message_id=message_id,
+        code=code,
+        user_id=user_id,
+        created_at=created_at,
+        webhook_timestamp=webhook_timestamp,
     )
 
 
@@ -76,11 +140,11 @@ async def test_process_subscribe(
         .where(ThreadTicketSub.chat_id == message.chat_id)
     )
     result = await session.execute(stmt)
-    sub = result.scalars().one()
+    sub = result.scalar_one()
     assert sub.issue_key == issue_key
     assert sub.chat_id == message.chat_id
     assert sub.message_id == message.id
-    pachca_client.send_message.assert_called_with(
+    pachca_client.send_message.assert_awaited_with(
         chat_id=message.chat_id,
         text=f"Я сообщу вам об изменении статуса тикета {issue_key}",
         parent_message_id=message.id,
@@ -129,7 +193,7 @@ async def test_process_unsubscribe(
     )
     result = await session.execute(stmt)
     assert len(result.scalars().all()) == 0
-    pachca_client.send_message.assert_called_with(
+    pachca_client.send_message.assert_awaited_with(
         chat_id=message.chat_id,
         text=f"Тикет {issue_key} больше не отслеживается в этом треде",
         parent_message_id=message.id,
@@ -165,7 +229,7 @@ async def test_subscribe_already_subscribed(
             session=session,
             pachca_client=pachca_client,
         )
-    pachca_client.send_message.assert_called_with(
+    pachca_client.send_message.assert_awaited_with(
         chat_id=message.chat_id,
         text=f"Тикет {issue_key} уже отслеживается в этом треде",
         parent_message_id=message.id,
@@ -200,7 +264,7 @@ async def test_process_unsubscribe_non_existing(
         session=session,
         pachca_client=pachca_client,
     )
-    pachca_client.send_message.assert_called_with(
+    pachca_client.send_message.assert_awaited_with(
         chat_id=message.chat_id,
         text=f"Тикет {issue_key} не отслеживался в этом треде",
         parent_message_id=message.id,
@@ -247,9 +311,9 @@ async def test_process_subscribe_is_transactional_with_broken_orm(
             .where(ThreadTicketSub.chat_id == message.chat_id)
         )
         result = await session.execute(stmt)
-        sub = result.scalars().one_or_none()
+        sub = result.scalar_one_or_none()
         assert sub is None
-        pachca_client.send_message.assert_not_called()
+        pachca_client.send_message.assert_not_awaited()
     else:
         assert False, "Exception was not raised, but it should"
 
@@ -295,9 +359,9 @@ async def test_process_subscribe_is_transactional_with_broken_pachca(
             .where(ThreadTicketSub.chat_id == message.chat_id)
         )
         result = await session.execute(stmt)
-        sub = result.scalars().one_or_none()
+        sub = result.scalar_one_or_none()
         assert sub is None
-        method.assert_called_once()
+        method.assert_awaited_once()
     else:
         assert False, "Exception was not raised, but it should"
 
@@ -349,11 +413,11 @@ async def test_process_unsubscribe_is_transactional_with_broken_orm(
             .where(ThreadTicketSub.chat_id == message.chat_id)
         )
         result = await session.execute(stmt)
-        sub = result.scalars().one()
+        sub = result.scalar_one()
         assert sub.issue_key == issue_key
         assert sub.chat_id == message.chat_id
         assert sub.message_id == message.id
-        pachca_client.send_message.assert_not_called()
+        pachca_client.send_message.assert_not_awaited()
     else:
         assert False, "Exception was not raised, but it should"
 
@@ -406,10 +470,172 @@ async def test_process_unsubscribe_is_transactional_with_broken_pachca(
             .where(ThreadTicketSub.chat_id == message.chat_id)
         )
         result = await session.execute(stmt)
-        sub = result.scalars().one()
+        sub = result.scalar_one()
         assert sub.issue_key == issue_key
         assert sub.chat_id == message.chat_id
         assert sub.message_id == message.id
-        method.assert_called_once()
+        method.assert_awaited_once()
     else:
         assert False, "Exception was not raised, but it should"
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    (
+        "message",
+        "user",
+    ),
+    (
+        (
+            pachca_message_factory(
+                id=1,
+                chat_id=1,
+                user_id=1,
+            ),
+            pachca_user_factory(
+                id=1,
+                list_tags=("StartDE_1",),
+            ),
+        ),
+        (
+            pachca_message_factory(
+                id=2,
+                chat_id=2,
+                user_id=1,
+                thread=ThreadInfo(
+                    message_id=1,
+                    message_chat_id=1,
+                )
+            ),
+            pachca_user_factory(
+                id=1,
+                list_tags=("StartDE_1",),
+            ),
+        ),
+    ),
+)
+async def test_process_student_message(
+    session: AsyncSession,
+    pachca_client: PachcaClient,
+    app_config: AppConfig,
+    message: PachcaMessage,
+    user: PachcaUser,
+):
+    with patch("app.service.pachca_client.PachcaClient.get_user", return_value=user):
+        await process_message(message, app_config, session, pachca_client)
+    stmt = select(StudentMessage).where(StudentMessage.message_id == message.id)
+    result = (await session.execute(stmt)).scalar_one()
+    assert not result.received_reaction
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    (
+        "message",
+        "user",
+    ),
+    (
+        (
+            pachca_message_factory(
+                id=1,
+                chat_id=1,
+                user_id=1,
+            ),
+            pachca_user_factory(
+                id=1,
+                list_tags=tuple(),
+            ),
+        ),
+        (
+            pachca_message_factory(
+                id=1,
+                chat_id=1,
+                user_id=1,
+            ),
+            pachca_user_factory(
+                id=1,
+                list_tags=("curator_StartDE",),
+            ),
+        ),
+        (
+            pachca_message_factory(
+                id=1,
+                chat_id=1,
+                user_id=1,
+            ),
+            pachca_user_factory(
+                id=1,
+                list_tags=("expert_StartDE",),
+            ),
+        ),
+    ),
+)
+async def test_process_other_message(
+    session: AsyncSession,
+    pachca_client: PachcaClient,
+    app_config: AppConfig,
+    message: PachcaMessage,
+    user: PachcaUser,
+):
+    with patch("app.service.pachca_client.PachcaClient.get_user", return_value=user):
+        await process_message(message, app_config, session, pachca_client)
+    stmt = select(StudentMessage).where(StudentMessage.message_id == message.id)
+    result = (await session.execute(stmt)).scalar_one_or_none()
+    assert result is None
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    (
+        "reaction",
+        "user",
+    ),
+    (
+        (
+            pachca_reaction_factory(
+                message_id=1,
+                user_id=1,
+            ),
+            pachca_user_factory(
+                id=1,
+                list_tags=("expert_StartDE",),
+            ),
+        ),
+    ),
+)
+async def test_process_reaction_to_student_message(
+    session: AsyncSession,
+    pachca_client: PachcaClient,
+    reaction: PachcaReaction,
+    user: PachcaUser,
+):
+    message_group_id = 1
+    message1 = StudentMessage(
+        message_id=reaction.message_id - 1,
+        message_group_id=message_group_id,
+        user_id=69,
+        chat_id=228,
+        thread_message_id=322,
+        thread_chat_id=1488,
+        text="niggers",
+        sent_at=datetime.now(timezone.utc),
+    )
+    message2 = StudentMessage(
+        message_id=reaction.message_id,
+        message_group_id=message_group_id,
+        user_id=69,
+        chat_id=228,
+        thread_message_id=322,
+        thread_chat_id=1488,
+        text="niggers",
+        sent_at=datetime.now(timezone.utc),
+    )
+    session.add(message1)
+    session.add(message2)
+    await session.commit()
+    with patch("app.service.pachca_client.PachcaClient.get_user", return_value=user):
+        await process_reaction(reaction, session, pachca_client)
+    stmt = select(StudentMessage).where(StudentMessage.message_group_id == message_group_id)
+    result = (await session.execute(stmt)).scalars().all()
+    for r in result:
+        assert r.received_reaction

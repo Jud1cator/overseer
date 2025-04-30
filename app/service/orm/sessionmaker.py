@@ -18,6 +18,6 @@ async def get_session() -> AsyncGenerator[AsyncSession, None]:
     async with sessionmaker() as session:
         try:
             yield session
-        except Exception:
+        except Exception as e:
             await session.rollback()
-            raise
+            raise e
