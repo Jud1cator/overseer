@@ -1,12 +1,12 @@
 import os
 from datetime import datetime, timezone
 from types import TracebackType
-from typing import AsyncGenerator
+from typing import AsyncGenerator, Any
 
 import aiohttp
 from loguru import logger
 
-from app.service.pachca_client.models import Message
+from app.service.pachca_client.models import Message, User
 
 
 class PachcaClient:
@@ -73,6 +73,27 @@ class PachcaClient:
         else:
             json = await response.json()
             logger.info(f"Message {json['data']['id']} successfuly sent")
+
+    async def get_user(self, user_id: int) -> User:
+        response = await self._session.get(
+            url=f"{self.HOST}/users/{user_id}",
+            headers=self._get_headers(),
+        )
+        if response.status != 200:
+            logger.error(response.content)
+            response.raise_for_status()
+        raw_user = await response.json()
+        return User(**raw_user["data"])
+
+    async def get_chat_info(self, chat_id: int) -> Any:
+        response = await self._session.get(
+            url=f"{self.HOST}/chats/{chat_id}",
+            headers=self._get_headers(),
+        )
+        if response.status != 200:
+            logger.error(response.content)
+            response.raise_for_status()
+        return await response.json()
 
     async def __aenter__(self) -> "PachcaClient":
         self._session = aiohttp.ClientSession()

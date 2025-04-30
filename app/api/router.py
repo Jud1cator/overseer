@@ -1,9 +1,11 @@
 from fastapi import APIRouter, Depends
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.models import PachcaMessage, TicketStatusChange
+from app.api.models import PachcaMessage, PachcaReaction, TicketStatusChange
 from app.config import AppConfig, get_config
 from app.service.event_processing.pachca_events import (
+    process_message,
+    process_reaction,
     process_subscribe,
     process_unsubscribe,
 )
@@ -54,6 +56,34 @@ async def ticket_status_change(
     await process_ticket_status_change(
         ticket_event=ticket_event,
         tracker_status_list=config.tracker_status_list,
+        session=session,
+        pachca_client=pachca_client,
+    )
+
+
+@router.post("/message")
+async def message(
+    message: PachcaMessage,
+    config: AppConfig = Depends(get_config),
+    session: AsyncSession = Depends(get_session),
+    pachca_client: PachcaClient = Depends(get_client),
+) -> None:
+    await process_message(
+        message=message,
+        config=config,
+        session=session,
+        pachca_client=pachca_client,
+    )
+
+
+@router.post("/reaction")
+async def reaction(
+    reaction: PachcaReaction,
+    session: AsyncSession = Depends(get_session),
+    pachca_client: PachcaClient = Depends(get_client),
+) -> None:
+    await process_reaction(
+        reaction=reaction,
         session=session,
         pachca_client=pachca_client,
     )

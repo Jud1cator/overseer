@@ -45,7 +45,7 @@ async def test_process_ticket_status_change(
         session=session,
         pachca_client=pachca_client,
     )
-    pachca_client.send_message.assert_has_calls(
+    pachca_client.send_message.assert_has_awaits(
         (
             call(
                 chat_id=sub.chat_id,

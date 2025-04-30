@@ -3,7 +3,7 @@ name = "overseer"
 version = "0.1.0"
 description = ""
 authors = [
-    {name = "judicator",email = "yarik200027@gmail.com"}
+    {name = "judicator",email = "judicator.aldaris@yandex.ru"}
 ]
 readme = "README.md"
 requires-python = ">=3.12,<4.0"
@@ -20,6 +20,9 @@ dependencies = [
     "pytest==8.3.4",
     "pytest_asyncio==0.25.3",
     "sqlalchemy[asyncio]==2.0.37",
+    "ruff==0.11.7",
+    "aiogram==3.20.0.post0",
+    "typing-inspect==0.9.0",
 ]
 
 

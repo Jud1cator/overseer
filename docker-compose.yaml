@@ -38,8 +38,13 @@ services:
     environment:
       STORAGE_DSN: ${STORAGE_DSN}
       PACHCA_TOKEN: ${PACHCA_TOKEN}
+      TELEGRAM_TOKEN: ${TELEGRAM_TOKEN}
+      TELEGRAM_CHAT_ID: ${TELEGRAM_CHAT_ID}
     ports:
       - 8000:8000
+    depends_on:
+      postgres:
+        condition: service_healthy
 
 volumes:
   pgdata:
