@@ -35,6 +35,8 @@ services:
   overseer:
     build: .
     container_name: overseer
+    environment:
+      STORAGE_DSN: ${STORAGE_DSN}
     ports:
       - 8000:8000
     depends_on:
