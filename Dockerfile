@@ -18,6 +18,7 @@ COPY app /overseer/app
 
 COPY alembic.ini /overseer/alembic.ini
 COPY alembic /overseer/alembic
+COPY .env /overseer/.env
 
 ENTRYPOINT ["bash"]
 CMD ["/overseer/app/entrypoint.sh"]
