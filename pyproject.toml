@@ -23,6 +23,7 @@ dependencies = [
     "ruff==0.11.7",
     "aiogram==3.20.0.post0",
     "typing-inspect==0.9.0",
+    "python-dotenv==1.1.0",
 ]
 
 
