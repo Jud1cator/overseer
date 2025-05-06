@@ -2,6 +2,7 @@ from datetime import datetime, timedelta, timezone
 
 import pytest
 from sqlalchemy.ext.asyncio import AsyncSession
+from unittest.mock import call
 
 from app.config import AppConfig
 from app.service.orm.models import StudentMessage
@@ -29,7 +30,7 @@ async def test_notify_about_pending_questions_not_violated_sla(
     telegram_client: TelegramClient,
     app_config: AppConfig,
 ):
-    test_time = datetime(1970, 1, 1, 0, 0, 0, tzinfo=timezone.utc)
+    test_time = datetime(1970, 1, 1, 7, 0, 0, tzinfo=timezone.utc)
     session.add_all(
         (
             StudentMessage(
@@ -83,7 +84,7 @@ async def test_notify_about_pending_questions_violated_sla(
     telegram_client: TelegramClient,
     app_config: AppConfig,
 ):
-    test_time = datetime(1970, 1, 1, 0, 0, 0, tzinfo=timezone.utc)
+    test_time = datetime(1970, 1, 1, 7, 0, 0, tzinfo=timezone.utc)
     session.add(
         StudentMessage(
             message_id=1,
@@ -95,6 +96,7 @@ async def test_notify_about_pending_questions_violated_sla(
             text="hello",
             received_reaction=False,
             sent_at=test_time,
+            course="HardDE",
         )
     )
     await session.commit()
@@ -104,10 +106,10 @@ async def test_notify_about_pending_questions_violated_sla(
         config=app_config,
         check_time=test_time + timedelta(seconds=app_config.response_sla_seconds + 1),
     )
-    telegram_client.send_message.assert_awaited_with(
+    telegram_client.send_message.assert_awaited_once_with(
         chat_id=app_config.telegram_chat_id,
         message=(
-            "Сообщения ожидающие реакции:\n\n"
+            "#HardDE: сообщения ожидающие реакции:\n\n"
             "https://app.pachca.com/chats/1?message=1"
         )
     )
@@ -119,7 +121,7 @@ async def test_notify_about_pending_questions_violated_sla_multiple(
     telegram_client: TelegramClient,
     app_config: AppConfig,
 ):
-    test_time = datetime(1970, 1, 1, 0, 0, 0, tzinfo=timezone.utc)
+    test_time = datetime(2025, 5, 7, 7, 0, 0, tzinfo=timezone.utc)
     session.add_all(
         (
             StudentMessage(
@@ -132,6 +134,7 @@ async def test_notify_about_pending_questions_violated_sla_multiple(
                 text="hello",
                 received_reaction=False,
                 sent_at=test_time,
+                course="HardDE",
             ),
             StudentMessage(
                 message_id=2,
@@ -143,6 +146,7 @@ async def test_notify_about_pending_questions_violated_sla_multiple(
                 text="hello",
                 received_reaction=False,
                 sent_at=test_time + timedelta(seconds=app_config.response_sla_seconds),
+                course="HardDE",
             ),
             StudentMessage(
                 message_id=3,
@@ -154,6 +158,7 @@ async def test_notify_about_pending_questions_violated_sla_multiple(
                 text="hello",
                 received_reaction=False,
                 sent_at=test_time,
+                course="HardDE",
             ),
             StudentMessage(
                 message_id=4,
@@ -165,6 +170,19 @@ async def test_notify_about_pending_questions_violated_sla_multiple(
                 text="hello",
                 received_reaction=False,
                 sent_at=test_time + timedelta(seconds=app_config.response_sla_seconds),
+                course="HardDE",
+            ),
+            StudentMessage(
+                message_id=5,
+                message_group_id=4,
+                user_id=4,
+                chat_id=3,
+                thread_message_id=None,
+                thread_chat_id=None,
+                text="hello",
+                received_reaction=False,
+                sent_at=test_time,
+                course="StartDE",
             ),
         )
     )
@@ -175,11 +193,22 @@ async def test_notify_about_pending_questions_violated_sla_multiple(
         config=app_config,
         check_time=test_time + timedelta(seconds=app_config.response_sla_seconds + 1),
     )
-    telegram_client.send_message.assert_awaited_with(
-        chat_id=app_config.telegram_chat_id,
-        message=(
-            "Сообщения ожидающие реакции:\n\n"
-            "https://app.pachca.com/chats/1?message=1\n\n"
-            "https://app.pachca.com/chats/1?message=3"
+    telegram_client.send_message.assert_has_awaits(
+        (
+            call(
+                chat_id=app_config.telegram_chat_id,
+                message=(
+                    "#HardDE: сообщения ожидающие реакции:\n\n"
+                    "https://app.pachca.com/chats/1?message=1\n\n"
+                    "https://app.pachca.com/chats/1?message=3"
+                )
+            ),
+            call(
+                chat_id=app_config.telegram_chat_id,
+                message=(
+                    "#StartDE: сообщения ожидающие реакции:\n\n"
+                    "https://app.pachca.com/chats/3?message=5"
+                )
+            ),   
         )
     )

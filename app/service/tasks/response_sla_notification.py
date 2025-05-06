@@ -1,4 +1,6 @@
-from datetime import datetime, timedelta, timezone
+import asyncio
+from datetime import datetime, time, timedelta, timezone
+from zoneinfo import ZoneInfo
 
 from loguru import logger
 from sqlalchemy import select
@@ -33,13 +35,48 @@ async def notify_about_pending_questions(
         else:
             groups[message.message_group_id] = message
     logger.info(f"Pending message groups: {len(groups)}")
-    msg_links = []
-    for msg in sorted(groups.values(), key=lambda m: m.created_at):
-        if msg.thread_message_id is None:
-            msg_links.append(f"https://app.pachca.com/chats/{msg.chat_id}?message={msg.message_id}")
-        else:
-            msg_links.append(
-                f"https://app.pachca.com/chats?thread_message_id={msg.thread_message_id}&sidebar_message={msg.message_id}"
+    tasks = []
+    for course in ("HardDE", "StartDE"):
+        msg_links = []
+        for msg in sorted(filter(lambda msg: msg.course == course, groups.values()), key=lambda m: m.created_at):
+            if msg.thread_message_id is None:
+                msg_links.append(f"https://app.pachca.com/chats/{msg.chat_id}?message={msg.message_id}")
+            else:
+                msg_links.append(
+                    f"https://app.pachca.com/chats?thread_message_id={msg.thread_message_id}&sidebar_message={msg.message_id}"
+                )
+        msg_text = f"#{course}: сообщения ожидающие реакции:\n\n{'\n\n'.join(msg_links)}"
+        msk_dttm = check_time.astimezone(ZoneInfo("Europe/Moscow"))
+        if (
+            len(msg_links) > 0
+            and (
+                (
+                    course == "HardDE"
+                    and (time(10, 0) <= msk_dttm.time() <= time(14, 55) or time(17, 0) <= msk_dttm.time() <= time(21, 55))
+                )
+                or
+                (
+                    course == "StartDE"
+                    and (
+                        msk_dttm.weekday() in {0, 1}
+                        and time(17, 0) <= msk_dttm.time() <= time(21, 55)
+                        or msk_dttm.weekday() in {2, 3, 4}
+                        and (time(10, 0) <= msk_dttm.time() <= time(14, 55) or time(17, 0) <= msk_dttm.time() <= time(21, 55))
+                    )
+                )
             )
-    msg_text = f"Сообщения ожидающие реакции:\n\n{'\n\n'.join(msg_links)}"
-    await telegram_client.send_message(chat_id=config.telegram_chat_id, message=msg_text)
+        ):
+            tasks.append(
+                asyncio.create_task(telegram_client.send_message(chat_id=config.telegram_chat_id, message=msg_text))
+            )
+    results = await asyncio.gather(*tasks, return_exceptions=True)
+    n_exceptions = sum(1 if isinstance(r, Exception) else 0 for r in results)
+    if n_exceptions > 0:
+        logger.warning(
+            "Some errors were encountered while trying to send messages, {}/{} requests failed.".format(
+                n_exceptions, len(results)
+            )
+        )
+        for r in results:
+            if isinstance(r, Exception):
+                logger.error(r)
