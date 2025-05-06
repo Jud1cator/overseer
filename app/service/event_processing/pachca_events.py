@@ -84,7 +84,7 @@ async def process_unsubscribe(
 
 
 def user_is_expert(user: User) -> bool:
-    return any(t in {"expert_HardDE", "expert_StartDE"} for t in user.list_tags)
+    return any(t in {"expert_HardDE", "expert_StartDE", "curator_StartDE", "curator_HardDE"} for t in user.list_tags)
 
 
 def user_is_student(user: User) -> bool:
@@ -110,6 +110,7 @@ async def process_student_mesage(
     message: PachcaMessage,
     config: AppConfig,
     session: AsyncSession,
+    user: User,
 ) -> None:
     stmt = (
         select(StudentMessage)
@@ -130,6 +131,13 @@ async def process_student_mesage(
     else:
         message_group_id = results[0].message_group_id
         logger.info(f"Received message {message.id} from existing message group: {message_group_id}")
+
+    course = None
+    if any(re.match(r"HadrDE_\d+", tag) for tag in user.list_tags):
+        course = "HardDE"
+    elif any(re.match(r"StartDE_\d+", tag) for tag in user.list_tags):
+        course = "StartDE"
+
     new_msg = StudentMessage(
         message_id=message.id,
         message_group_id=message_group_id,
@@ -140,12 +148,18 @@ async def process_student_mesage(
         text=message.content,
         received_reaction=False,
         sent_at=message.created_at,
+        course=course,
     )
     session.add(new_msg)
     await session.commit()
 
 
-async def process_expert_message(message: PachcaMessage, config: AppConfig, session: AsyncSession) -> None:
+async def process_expert_message(
+    message: PachcaMessage,
+    config: AppConfig,
+    session: AsyncSession,
+    user: User,
+) -> None:
     if message.parent_message_id is None:
         logger.info(f"Message {message.id} is from an expert but is not a reply, skipping")
         return
@@ -180,9 +194,9 @@ async def process_message(
 ) -> None:
     user = await pachca_client.get_user(message.user_id)
     if user_is_student(user):
-        await process_student_mesage(message, config, session)
+        await process_student_mesage(message, config, session, user)
     elif user_is_expert(user):
-        await process_expert_message(message, config, session)
+        await process_expert_message(message, config, session, user)
     else:
         logger.info(f"Message {message.id} is ignored because it is not from student or expert")
 

@@ -37,3 +37,4 @@ class StudentMessage(Base):
     reaction_message_id: Mapped[int | None] = mapped_column(default=None)
     sent_at: Mapped[datetime]
     created_at: Mapped[datetime] = mapped_column(default=datetime.now(timezone.utc))
+    course: Mapped[str | None] = mapped_column(default=None)

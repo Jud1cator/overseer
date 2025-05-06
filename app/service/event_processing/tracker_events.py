@@ -39,3 +39,6 @@ async def process_ticket_status_change(
                 n_exceptions, len(results)
             )
         )
+        for r in results:
+            if isinstance(r, Exception):
+                logger.error(r)
