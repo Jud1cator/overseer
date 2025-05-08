@@ -37,6 +37,32 @@ async def notify_about_pending_questions(
     logger.info(f"Pending message groups: {len(groups)}")
     tasks = []
     for course in ("HardDE", "StartDE"):
+        msk_dttm = check_time.astimezone(ZoneInfo("Europe/Moscow"))
+        logger.info(f"Moscow time is {msk_dttm.time()}")
+        send = False
+        logger.info(f"Checking shift time for {course}")
+        if time(10, 0) <= msk_dttm.time() <= time(14, 55):
+            logger.info(f"Currently it is morning shift for {course}")
+            if course == "HardDE":
+                send = True
+            elif course == "StartDE":
+                weekday = msk_dttm.weekday()
+                if weekday in {2, 3, 4}:
+                    send = True
+                else:
+                    logger.info(f"Current weekday is {weekday}, StartDE morning shifts are only on 2, 3 and 4")
+            else:
+                logger.error(f"Unknown course: {course}")
+        elif time(17, 0) <= msk_dttm.time() <= time(21, 55):
+            logger.info(f"Currently it is evening shift for {course}")
+            send = True
+        else:
+            logger.info(f"Currently there is no shift for {course}")
+
+        if not send:
+            logger.info(f"Not sending notification for {course} because it is not shift time")
+            continue
+
         msg_links = []
         for msg in sorted(filter(lambda msg: msg.course == course, groups.values()), key=lambda m: m.created_at):
             if msg.thread_message_id is None:
@@ -46,33 +72,15 @@ async def notify_about_pending_questions(
                     f"https://app.pachca.com/chats?thread_message_id={msg.thread_message_id}&sidebar_message={msg.message_id}"
                 )
             logger.info(f"Message {msg.message_id} is added to notification list")
+        if len(msg_links) == 0:
+            logger.info(f"No pending messages for {course}")
+            continue
         msg_text = f"#{course}: сообщения ожидающие реакции:\n\n{'\n\n'.join(msg_links)}"
-        msk_dttm = check_time.astimezone(ZoneInfo("Europe/Moscow"))
-        if (
-            len(msg_links) > 0
-            and (
-                (
-                    course == "HardDE"
-                    and (time(10, 0) <= msk_dttm.time() <= time(14, 55) or time(17, 0) <= msk_dttm.time() <= time(21, 55))
-                )
-                or
-                (
-                    course == "StartDE"
-                    and (
-                        msk_dttm.weekday() in {0, 1}
-                        and time(17, 0) <= msk_dttm.time() <= time(21, 55)
-                        or msk_dttm.weekday() in {2, 3, 4}
-                        and (time(10, 0) <= msk_dttm.time() <= time(14, 55) or time(17, 0) <= msk_dttm.time() <= time(21, 55))
-                    )
-                )
-            )
-        ):
-            logger.info(f"Sending notification for {course}: {msg_text}")
-            tasks.append(
-                asyncio.create_task(telegram_client.send_message(chat_id=config.telegram_chat_id, message=msg_text))
-            )
-        else:
-            logger.info(f"Not sending notification for {course} because it is not shift time")
+        logger.info(f"Sending notification for {course}")
+        tasks.append(
+            asyncio.create_task(telegram_client.send_message(chat_id=config.telegram_chat_id, message=msg_text))
+        )
+
     results = await asyncio.gather(*tasks, return_exceptions=True)
     n_exceptions = sum(1 if isinstance(r, Exception) else 0 for r in results)
     if n_exceptions > 0:
