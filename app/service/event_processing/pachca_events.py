@@ -2,7 +2,7 @@ import re
 from datetime import datetime, timedelta
 
 from loguru import logger
-from sqlalchemy import select
+from sqlalchemy import TIMESTAMP, cast, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.models import PachcaMessage, PachcaReaction
@@ -121,7 +121,8 @@ async def process_student_mesage(
             | (StudentMessage.message_id == message.thread.message_id if message.thread is not None else False)
         )
         .where(
-            message.created_at <= StudentMessage.sent_at + timedelta(seconds=config.message_group_time_frame_seconds)
+            cast(message.created_at, TIMESTAMP(timezone=True))
+            <= StudentMessage.sent_at + timedelta(seconds=config.message_group_time_frame_seconds)
         )
     )
     results = (await session.execute(stmt)).scalars().all()

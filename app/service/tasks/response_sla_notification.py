@@ -45,6 +45,7 @@ async def notify_about_pending_questions(
                 msg_links.append(
                     f"https://app.pachca.com/chats?thread_message_id={msg.thread_message_id}&sidebar_message={msg.message_id}"
                 )
+            logger.info(f"Message {msg.message_id} is added to notification list")
         msg_text = f"#{course}: сообщения ожидающие реакции:\n\n{'\n\n'.join(msg_links)}"
         msk_dttm = check_time.astimezone(ZoneInfo("Europe/Moscow"))
         if (
@@ -66,9 +67,12 @@ async def notify_about_pending_questions(
                 )
             )
         ):
+            logger.info(f"Sending notification for {course}: {msg_text}")
             tasks.append(
                 asyncio.create_task(telegram_client.send_message(chat_id=config.telegram_chat_id, message=msg_text))
             )
+        else:
+            logger.info(f"Not sending notification for {course} because it is not shift time")
     results = await asyncio.gather(*tasks, return_exceptions=True)
     n_exceptions = sum(1 if isinstance(r, Exception) else 0 for r in results)
     if n_exceptions > 0:
