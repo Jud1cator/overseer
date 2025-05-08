@@ -121,7 +121,7 @@ async def process_student_mesage(
             | (StudentMessage.message_id == message.thread.message_id if message.thread is not None else False)
         )
         .where(
-            message.created_at - StudentMessage.sent_at <= timedelta(seconds=config.message_group_time_frame_seconds)
+            message.created_at <= StudentMessage.sent_at + timedelta(seconds=config.message_group_time_frame_seconds)
         )
     )
     results = (await session.execute(stmt)).scalars().all()
@@ -133,7 +133,7 @@ async def process_student_mesage(
         logger.info(f"Received message {message.id} from existing message group: {message_group_id}")
 
     course = None
-    if any(re.match(r"HadrDE_\d+", tag) for tag in user.list_tags):
+    if any(re.match(r"HardDE_\d+", tag) for tag in user.list_tags):
         course = "HardDE"
     elif any(re.match(r"StartDE_\d+", tag) for tag in user.list_tags):
         course = "StartDE"
