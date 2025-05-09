@@ -51,9 +51,9 @@ async def session(
         try:
             await __truncate_tables(session)
             yield session
-        except Exception:
+        except Exception as e:
             await session.rollback()
-            raise
+            raise e
 
 
 @pytest_asyncio.fixture()
