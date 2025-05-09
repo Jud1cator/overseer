@@ -81,7 +81,7 @@ async def notify_about_pending_questions(
             asyncio.create_task(telegram_client.send_message(chat_id=config.telegram_chat_id, message=msg_text))
         )
 
-    results = await asyncio.gather(*tasks, return_exceptions=True)
+    results: list[BaseException | None] = await asyncio.gather(*tasks, return_exceptions=True)
     n_exceptions = sum(1 if isinstance(r, Exception) else 0 for r in results)
     if n_exceptions > 0:
         logger.warning(
@@ -92,3 +92,4 @@ async def notify_about_pending_questions(
         for r in results:
             if isinstance(r, Exception):
                 logger.error(r)
+        raise RuntimeError("Some errors occured during sending notifications to telegram")
