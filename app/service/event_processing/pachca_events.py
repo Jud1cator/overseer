@@ -112,6 +112,20 @@ async def process_student_mesage(
     session: AsyncSession,
     user: User,
 ) -> None:
+    if message.event == "new":
+        await process_new_student_message(message, config, session, user)
+    elif message.event == "delete":
+        await process_deleted_student_message(message, config, session, user)
+    else:
+        logger.info(f"Unprocessed message event: {message.event}")
+
+
+async def process_new_student_message(
+    message: PachcaMessage,
+    config: AppConfig,
+    session: AsyncSession,
+    user: User,
+) -> None:
     stmt = (
         select(StudentMessage)
         .where(~StudentMessage.received_reaction)
@@ -153,6 +167,21 @@ async def process_student_mesage(
     )
     session.add(new_msg)
     await session.commit()
+
+
+async def process_deleted_student_message(
+    message: PachcaMessage,
+    config: AppConfig,
+    session: AsyncSession,
+    user: User,
+) -> None:
+    stmt = select(StudentMessage).where(StudentMessage.message_id == message.id)
+    res = (await session.execute(stmt)).scalar_one_or_none()
+    if res is None:
+        logger.info(f"Message {message.id} was not tracked")
+        return
+    await session.delete(res)
+    logger.info(f"Successfuly deleted message {message.id}")
 
 
 async def process_expert_message(

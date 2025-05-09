@@ -1,3 +1,4 @@
+import typing as tp
 from datetime import datetime, timezone
 from unittest.mock import patch
 
@@ -20,16 +21,16 @@ from app.service.pachca_client.models import User as PachcaUser
 
 def pachca_message_factory(
     id=1,
-    type="default_type",
-    event="default_event",
-    entity_type="default_event_type",
+    type="message",
+    event="new",
+    entity_type="discussion",
     entity_id=1,
     content="default_content",
     user_id=1,
     created_at=datetime.now(timezone.utc),
     chat_id=1,
     parent_message_id=None,
-    thread=None
+    thread=None,
 ) -> PachcaMessage:
     return PachcaMessage(
         type=type,
@@ -499,13 +500,24 @@ async def test_process_unsubscribe_is_transactional_with_broken_pachca(
         ),
         (
             pachca_message_factory(
+                id=1,
+                chat_id=1,
+                user_id=1,
+            ),
+            pachca_user_factory(
+                id=1,
+                list_tags=("HardDE_1",),
+            ),
+        ),
+        (
+            pachca_message_factory(
                 id=2,
                 chat_id=2,
                 user_id=1,
                 thread=ThreadInfo(
                     message_id=1,
                     message_chat_id=1,
-                )
+                ),
             ),
             pachca_user_factory(
                 id=1,
@@ -526,6 +538,63 @@ async def test_process_student_message(
     stmt = select(StudentMessage).where(StudentMessage.message_id == message.id)
     result = (await session.execute(stmt)).scalar_one()
     assert not result.received_reaction
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    (
+        "messages",
+        "delete_event",
+        "user",
+    ),
+    (
+        (
+            tuple(),
+            pachca_message_factory(
+                id=1,
+                event="delete",
+                user_id=1,
+            ),
+            pachca_user_factory(
+                id=1,
+                list_tags=("StartDE_1",),
+            ),
+        ),
+        (
+            (
+                pachca_message_factory(
+                    id=1,
+                    event="new",
+                    user_id=1,
+                ),
+            ),
+            pachca_message_factory(
+                id=1,
+                event="delete",
+                user_id=1,
+            ),
+            pachca_user_factory(
+                id=1,
+                list_tags=("StartDE_1",),
+            ),
+        ),
+    ),
+)
+async def test_process_deleted_student_message(
+    session: AsyncSession,
+    pachca_client: PachcaClient,
+    app_config: AppConfig,
+    messages: tp.Sequence[PachcaMessage],
+    delete_event: PachcaMessage,
+    user: PachcaUser,
+):
+    with patch("app.service.pachca_client.PachcaClient.get_user", return_value=user):
+        for msg in messages:
+            await process_message(msg, app_config, session, pachca_client)
+        await process_message(delete_event, app_config, session, pachca_client)
+    stmt = select(StudentMessage).where(StudentMessage.message_id == delete_event.id)
+    result = (await session.execute(stmt)).scalar_one_or_none()
+    assert result is None
 
 
 @pytest.mark.asyncio
