@@ -181,6 +181,7 @@ async def process_deleted_student_message(
         logger.info(f"Message {message.id} was not tracked")
         return
     await session.delete(res)
+    await session.commit()
     logger.info(f"Successfuly deleted message {message.id}")
 
 
