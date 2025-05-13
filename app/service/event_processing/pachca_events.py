@@ -191,19 +191,38 @@ async def process_expert_message(
     session: AsyncSession,
     user: User,
 ) -> None:
-    if message.parent_message_id is None:
-        logger.info(f"Message {message.id} is from an expert but is not a reply, skipping")
-        return
-    stmt = (
-        select(StudentMessage)
-        .where(~StudentMessage.received_reaction)
-        .where(StudentMessage.message_id == message.parent_message_id)
-    )
-    result = (await session.execute(stmt)).scalar_one_or_none()
-    if result is None:
+    # Direct reply
+    if message.parent_message_id is not None:
+        stmt = (
+            select(StudentMessage)
+            .where(~StudentMessage.received_reaction)
+            .where(StudentMessage.message_id == message.parent_message_id)
+        )
+        result = (await session.execute(stmt)).scalar_one_or_none()
+        if result is None:
+            logger.info(
+                f"Message {message.id} is a reply to message {message.parent_message_id}"
+                " which is not a pending student question, skipping."
+            )
+            return
+    # Thread started under fresh student message
+    elif message.thread is not None:
+        stmt = (
+            select(StudentMessage)
+            .where(~StudentMessage.received_reaction)
+            .where(StudentMessage.message_id == message.thread.message_id)
+        )
+        result = (await session.execute(stmt)).scalar_one_or_none()
+        if result is None:
+            logger.info(
+                f"Message {message.id} is not in a thread started by not reacted student message,"
+                " skipping."
+            )
+            return
+    else:
         logger.info(
-            f"Message {message.id} is a reply to message {message.parent_message_id}"
-            " which is not a pending student question, skipping"
+            f"Message {message.id} is from an expert, but is not a reply to a student"
+            " and not in a thread started by student message, skipping."
         )
         return
     # If we are here, it means reply to some message from pending message group is received

@@ -708,3 +708,81 @@ async def test_process_reaction_to_student_message(
     result = (await session.execute(stmt)).scalars().all()
     for r in result:
         assert r.received_reaction
+
+
+@pytest.mark.asyncio
+async def test_process_reply_to_student_message(
+    session: AsyncSession,
+    app_config: AppConfig,
+    pachca_client: PachcaClient,
+):
+    student_message = StudentMessage(
+        message_id=1,
+        message_group_id=1,
+        user_id=69,
+        chat_id=228,
+        thread_message_id=322,
+        thread_chat_id=1488,
+        text="niggers",
+        sent_at=datetime.now(timezone.utc),
+        course="StartDE",
+    )
+    session.add(student_message)
+    await session.commit()
+
+    user = pachca_user_factory(
+        id=1,
+        list_tags=("expert_StartDE",),
+    )
+    reply = pachca_message_factory(
+        id=2,
+        parent_message_id=1,
+        user_id=1,
+    )
+
+    with patch("app.service.pachca_client.PachcaClient.get_user", return_value=user):
+        await process_message(reply, app_config, session, pachca_client)
+
+    stmt = select(StudentMessage).where(StudentMessage.message_group_id == 1)
+    result = (await session.execute(stmt)).scalars().all()
+    for r in result:
+        assert r.received_reaction
+
+@pytest.mark.asyncio
+async def test_process_reply_in_thread_to_student_message(
+    session: AsyncSession,
+    app_config: AppConfig,
+    pachca_client: PachcaClient,
+):
+    student_message = StudentMessage(
+        message_id=1,
+        message_group_id=1,
+        user_id=69,
+        chat_id=228,
+        text="niggers",
+        sent_at=datetime.now(timezone.utc),
+        course="StartDE",
+    )
+    session.add(student_message)
+    await session.commit()
+
+    user = pachca_user_factory(
+        id=1,
+        list_tags=("expert_StartDE",),
+    )
+    reply = pachca_message_factory(
+        id=2,
+        user_id=1,
+        thread=ThreadInfo(
+            message_id=1,
+            message_chat_id=322,
+        ),
+    )
+
+    with patch("app.service.pachca_client.PachcaClient.get_user", return_value=user):
+        await process_message(reply, app_config, session, pachca_client)
+
+    stmt = select(StudentMessage).where(StudentMessage.message_group_id == 1)
+    result = (await session.execute(stmt)).scalars().all()
+    for r in result:
+        assert r.received_reaction
