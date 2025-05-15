@@ -84,7 +84,10 @@ async def process_unsubscribe(
 
 
 def user_is_expert(user: User) -> bool:
-    return any(t in {"expert_HardDE", "expert_StartDE", "curator_StartDE", "curator_HardDE"} for t in user.list_tags)
+    return any(
+        "expert_HardDE" in t or "expert_StartDE" in t or "curator_StartDE" in t or "curator_HardDE" in t
+        for t in user.list_tags
+    )
 
 
 def user_is_student(user: User) -> bool:
@@ -214,10 +217,7 @@ async def process_expert_message(
         )
         result = (await session.execute(stmt)).scalar_one_or_none()
         if result is None:
-            logger.info(
-                f"Message {message.id} is not in a thread started by not reacted student message,"
-                " skipping."
-            )
+            logger.info(f"Message {message.id} is not in a thread started by not reacted student message, skipping.")
             return
     else:
         logger.info(
